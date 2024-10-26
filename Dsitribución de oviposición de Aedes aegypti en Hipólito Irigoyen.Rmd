@@ -1,0 +1,199 @@
+---
+title: "Distribución espacial de oviposición de Aedes egypti en Hipólito Irigoyen, Salta, Argentina"
+author: "Jose García Tácite"
+date: "2024-03-14"
+output:
+  rmdformats::downcute:
+    html_document:
+      df_print: kable
+
+---
+
+## Introducción
+
+Para desarrollar un manejo integrado del vector del dengue, los organismos públicos requieren información acerca del tamaño y distribución de la población de Aedes egypti. El análisis geoestadístico permite generar información relevante, por ejemplo, a partir de estudios que emplean trampas de oviposición. La oviposición es el proceso por el cual las hembras de esta especie de mosquito expulsan sus huevos. La pesquisa sobre la que se basa este informe monitoreó la actividad de oviposición en 99 trampas revisadas semanalmente durante un año en la localidad de Hipólito Yrigoyen, Salta, ubicada en la ecorregión de las yungas. El clima de esta ecorregión es subtropical húmedo, con una temperatura media estival de 27 °C y una precipitación media anual de 900 a 1.000 mm, concentrada principalmente en el verano (Chanampa et al., 2018).
+
+Se cuenta con la base de datos resultante de la investigación desarrollada por la Dra. Teresa Boca (UBA). A su vez, este R Markdown se desprende de un trabajo integrador para la aprobación de la Diplomatura Universitaria en Geompatica Aplicada del Instituto Gulich, Comisión Nacional de Actividades Espaciales, Universidad Nacional de Córdoba. De esta forma, la autoría de estos análisis, conclusiones y gráficos corresponde a:
+
+-   Cavilla, Cintya Elizabeth
+
+-   Deguiz, Santiago Manuel
+
+-   García Tácite, Jose
+
+-   Mazur, María Yisell
+
+-   Pagliaricci, Lucas Leonel
+
+-   Tesando, María Soledad
+
+```{r setup, include=FALSE}
+library (readxl)
+library(fBasics)
+library(tidyverse)
+library(leaflet)
+library(akima)
+library(timeDate)
+
+
+aedes_aegypti <- read_excel("D:/Dengue_Arg/aedes_aegypti.xlsx")
+```
+
+
+### Un primer vistazo al dataset
+
+Posee una columna que indica la cantidad de huevos encontrados en cierta latitud y longitud de la localidad.
+
+```{r}
+aedes_aegypti
+```
+
+### Cantidad total de huevos encontrados en trampas
+
+Se encontraron 2205 huevos capturados en 99 trampas dispuestas en toda la localidad.
+
+```{r}
+aedes_aegypti %>%
+  summarise(huevos_total = sum(Huevos_Aa)) 
+```
+
+## Distribución espacial de huevos
+
+```{r}
+leaflet(aedes_aegypti)%>%
+  addTiles()%>%
+  addCircleMarkers(radius=0.05,color="darkorchid",~longitud,~latitud)
+```
+
+```{r}
+ggplot(aedes_aegypti, aes(x=longitud, y=latitud, size= Huevos_Aa))+
+  geom_point(color = 'darkorchid')+
+  theme_minimal()+
+  labs(title = 'Distribución espacial de huevos', x = 'Longitud', y = 'Latitud', size = 'Cantidad de huevos')
+```
+
+Varios círculos de tamaño grande se encuentran al sureste.
+
+
+## Exploración de estadística descriptiva
+
+### Estadísticos de tendencia central y de dispersión:
+
+```{r}
+round(basicStats(aedes_aegypti$Huevos_Aa),2)
+```
+
+De las 99 trampas (o número de observaciones), una capturó 54 (máximo), y otra solo 2 (mínimo). El promedio es de 22.27 huevos por trampa.
+
+*Agrupación de trampas en dos grupos ("valores altos" y "Valores bajos") según si superan o no el promedio de huevos*
+
+```{r}
+aedes_aegypti$valores <- ifelse(aedes_aegypti$Huevos_Aa > 22, "alto","bajo")
+aedes_aegypti$col_valores <- ifelse(aedes_aegypti$Huevos_Aa > 22, "red","blue")
+
+
+plot (latitud~longitud,data=aedes_aegypti,col=col_valores, asp=1)
+legend("bottomright", col = c("red", "blue"), legend = c("Valores altos", "Valores bajos"), bty = 'n', pch = 1, title = "Distribución de huevos")
+```
+
+Los valores altos se concentran hacia el centro y sureste.
+
+**Gráfico de contornos o isolíneas**
+
+```{r}
+int.aedes <- interp(x=aedes_aegypti$longitud, y=aedes_aegypti$latitud,z=aedes_aegypti$Huevos_Aa)
+image(int.aedes,xlab="Longitud",ylab="Latitud")
+contour(int.aedes,add=TRUE)
+points(latitud~longitud,aedes_aegypti,col="black")
+```
+
+En concordancia con los gráficos anteriores, el color anaranjado se intensifica hacia el sureste.
+
+
+## Tendencias de distribución
+
+La explicación de los métodos gráficos y analíticos fue obtenida de la siguiente fuente:
+
+-   Bocca, T. Sammaritano, M. & Equipo de Educación a Distancia Mario Gulich. (2022). Unidad 2: Análisis de datos espaciales. Módulo 3: Análisis de datos espaciales y sus aplicaciones. Diplomatura Universitaria en Geomática Aplicada. Instituto Superior de Altos Estudios Espaciales Mario Gulich. CONAE. Universidad Nacional de Córdoba.
+
+**Métodos gráficos**
+
+[*QQplot*]{.underline}
+
+Este tipo de herramienta compara gráficamente los cuantiles de una distribución teórica (en este caso normal), con los datos muestrales bajo estudio. Una vez obtenido el gráfico, se observa cuán cerca de la distribución teórica (recta) se encuentra el conjunto de datos en evaluación (puntos).
+
+```{r}
+par(col = "darkorchid", pch = 20, cex = 1)
+qqnorm(aedes_aegypti$Huevos_Aa, main = "QQplot normal con línea de distribución teórica", xlab = "Valores esperados", ylab = "Valores observados")
+qqline(aedes_aegypti$Huevos_Aa, col = "red3", lwd = 3)
+```
+
+Así, los valores observados se acercan bastante a los valores esperados, representados por la línea diagonal roja.
+
+[*Histograma*]{.underline}
+
+En él, para poder afirmar que una variable posee una distribución normal, se debería obtener un gráfico de forma acampanada.
+
+```{r}
+hist(aedes_aegypti$Huevos_Aa, prob = TRUE,
+     main = "Histograma con curva normal",
+     ylab = "Frecuncia",
+    xlab = "Cantidad de huevos",
+    col = 'antiquewhite')
+x <- seq(min(aedes_aegypti$Huevos_Aa), max(aedes_aegypti$Huevos_Aa), length = 40)
+f <- dnorm(x, mean = mean(aedes_aegypti$Huevos_Aa), sd = sd(aedes_aegypti$Huevos_Aa))
+lines(x, f, col = "red3", lwd = 2)
+```
+
+La línea roja presenta una forma bastante acampanada, indicando que la distribución puede ser considerada como normal.
+
+**Métodos analíticos**
+
+[*Test de normalidad de Shapiro-Wilk*]{.underline}
+
+Permite determinar si la variable sigue una distribución normal bajo hipótesis nula verdadera. La hipótesis es la que se pone a prueba y plantea que la variable en estudio sigue una distribución normal. La salida indica cuánto vale el estadístico de prueba W y la probabilidad de obtener un valor igual o mayor a éste, bajo el supuesto de la hipótesis nula verdadera, es decir, que la distribución de los datos sea normal. Así, la hipótesis nula es rechazada si el valor de p (p-value) del test estadístico es menor al nivel de significación establecido (convencionalmente 0,05 ó 0,01).
+
+```{r}
+shapiro.test(aedes_aegypti$Huevos_Aa)
+```
+
+Al obtener un p-value de 0.03176, es decir, menor a 0.05, se rechaza la hipótesis nula, indicando que, según este test, la distribución no es normal.
+
+[*Estimador de asimetría Skewness*]{.underline}
+
+La asimetría es la falta de armonía, equilibrio en una distribución o conjunto de datos. La asimetría de una distribución normal es cero. Skewness es un estimador de asimetría, cuyo valor indica si es necesario realizar una transformación.
+
+● En el caso de que este índice fuese mayor a 1, estaría señalando que sí es necesario transformar.
+
+● Si el resultado es entre 0.5 y 1, podría explorarse alguna transformación.
+
+● Si obtenemos valores menores a 0.5, no sería necesario transformar.
+
+```{r}
+abs(skewness(aedes_aegypti$Huevos_Aa))
+```
+
+El valor de 0.154778 indica que no es necesario transformar estos datos.
+
+
+## Resultados
+
+A partir de la exploración de los estadísticos centrales y de dispersión, en el conjunto de datos de la muestra (n= 99) se observó que la trampa que capturó la mayor cantidad de huevos registró un total de 54 (valor máximo), mientras que la captura mínima fue de 2 huevos (valor mínimo). El promedio de huevos capturados fue de 22, cifra que se encuentra significativamente por debajo del promedio sugerido por varios autores, el cual varía alrededor de 60 huevos e incluso, en algunos casos y si las condiciones del entorno así lo requieren, este valor puede elevarse hasta 100 (Ministerio de Salud, 2016).
+
+Se decidió clasificar las trampas en dos grupos ("altos valores" y "bajos valores") de acuerdo a si trampas superan o no el promedio de huevos capturados. Ambos gráficos muestran una mayor concentración de huevos de A. aegypti hacia el sureste de la localidad. Con respecto a la distribución, se contempló que los datos tienen una distribución mayoritariamente normal. Esta observación se fundamenta en los métodos gráficos de QQplot e histograma con curva de normalidad, y con el método analítico de estimador de asimetría Skewness que arrojó un valor de 0.15, muy próximo a 0. En base a estas consideraciones, si bien el test de Shapiro-Wilks da un valor de p de 0.03 (y al ser menor de 0.05, se supone que la hipótesis nula de distribución normal es rechazada), no se consideró necesario transformar los datos.
+
+
+## Conclusiones
+
+Dentro de las características observables, se destaca una mayor cobertura vegetal en la zona sureste. Según Chanampa, M. (2018), el refugio preferido por A. aegypti es principalmente la vegetación, donde la humedad es más alta que en otras partes de la vivienda o lugares sombreados y húmedos. Además de la influencia de la vegetación, se observa un cuerpo de agua que bordea el área, y ambos factores ambientales influyen en la presencia de valores más altos de oviposturas.
+
+![Imagen satelital del sureste de Hipólito Irigoyen](images/Captura%20de%20pantalla%202024-03-15%20113441.png)
+
+Entonces, sabiendo que el período reproductivo del mosquito A. aegypti se concentra en verano, coincidiendo con la época de lluvias, y que su reproducción se ve favorecida por el aumento de la humedad y las temperaturas favorables; y considerando los resultados obtenidos mediante los análisis espacial y estadísticos, se concluye que la zona sureste de la ciudad es aquella que requiere una mayor inversión en campañas de desinfección, tareas de desmalezado y limpieza de jardines para reducir las oportunidades de reproducción del vector del dengue. Como tareas adicionales que pueden favorecer indirectamente a la reducción de ambientes propicios para el desarrollo del mosquito, se podría considerar mejorar el drenaje de las calles para evitar acumulaciones de agua y evitar el establecimiento de basurales en áreas periféricas que puedan resultar sitios ideales para postura de huevos. También, será necesario profundizar en las campañas públicas de prevención del dengue en escuelas, dispensarios, iglesias, clubes y demás instituciones de la localidad, reforzando el uso de repelentes, la instalación de mosquiteros y el impedimento de aguas estancadas en recipientes.
+
+
+## Bibliografía consultada
+
+-   Bocca, T. Sammaritano, M. & Equipo de Educación a Distancia Mario Gulich. (2022). Unidad 2: Análisis de datos espaciales. Módulo 3: Análisis de datos espaciales y sus aplicaciones. Diplomatura Universitaria en Geomática Aplicada. Instituto Superior de Altos Estudios Espaciales Mario Gulich. CONAE. Universidad Nacional de Córdoba.
+-   Chanampa, M., Gil, J. F., Aparicio, J. P., Castillo, P., Mangudo, C., Copa, G. N. y Gleiser, R. M. (2018). Field comparison of oviposition substrates used in ovitraps for Aedes aegypti surveillance in Salta, Argentina. Journal of applied entomology, 142(10), 985-990. (<https://doi.org/10.1111/jen.12554>)
+-   Ministerio de Salud. (2016). Directrices para la prevención y control de Aedes aegypti. (\<<https://www.conicet.gov.ar/aedes-aegypti-un-problema-que-se-soluciona-con-la-ayudade-> todos/\>)
